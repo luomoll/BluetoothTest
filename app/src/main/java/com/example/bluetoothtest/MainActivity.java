@@ -12,6 +12,8 @@ import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -28,7 +30,9 @@ import android.widget.AdapterView;
 
 import java.lang.reflect.Method;
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Set;
 import java.util.UUID;
 
 import androidx.appcompat.app.AlertDialog;
@@ -74,12 +78,23 @@ public class MainActivity extends AppCompatActivity {
         PacketEnd,
         PacketEnd1;
     }
+    public static Handler handler = new Handler(){
+        public void handleMessage(Message message)
+        {
+            switch (message.what)
+            {
+//                case REQUEST:
 
+//                    break;
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
 
 
         //获取蓝牙适配器
@@ -123,6 +138,14 @@ public class MainActivity extends AppCompatActivity {
 
                 mBluetoothAdapter.startDiscovery();//开始搜索蓝牙
                 BondStartFlag = true;
+                Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
+                if (devices.size() > 0) {
+                    for (Iterator<BluetoothDevice> it = devices.iterator(); it.hasNext(); ) {
+                        BluetoothDevice de = (BluetoothDevice) it.next();
+                        deviceName.add("设备名：" + de.getName() + "(已配对)\n" + "设备地址：" + de.getAddress() + "\n");
+                        arrayList.add(de.getAddress());//将搜索到的蓝牙地址添加到列表。
+                    }
+                }
                 Log.i("zn3", "onReceive3333: ");
             }
         });
@@ -158,14 +181,12 @@ public class MainActivity extends AppCompatActivity {
         BlueToothListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
             public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
-                if(mBluetoothDevice.getBondState() == BluetoothDevice.BOND_BONDED)
-                {
+                if (mBluetoothDevice.getBondState() == BluetoothDevice.BOND_BONDED) {
                     try {
                         Method removeBondMethod = BluetoothDevice.class.getMethod("removeBond");
                         removeBondMethod.invoke(mBluetoothDevice);
                         showExitDialog01("取消配对");
-                    }
-                    catch ( IllegalAccessException | InvocationTargetException | NoSuchMethodException e){
+                    } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
                         return false;
                     }
 
@@ -174,6 +195,8 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+
 
     protected void connectDevice() {
         try {
@@ -346,8 +369,7 @@ public class MainActivity extends AppCompatActivity {
                         reData.flip();
                     }
                     while (reData.array().length > 0) {
-                        if(!reData.hasRemaining())
-                        {
+                        if (!reData.hasRemaining()) {
                             reData.compact();
                             break;
                         }
@@ -389,15 +411,14 @@ public class MainActivity extends AppCompatActivity {
                                 break;
                             case PacketSum:
                                 int sum = 0;
-                                for (int i = 1; i < array.length; i++)
-                                {
-                                    sum+=array[i];
+                                for (int i = 1; i < array.length; i++) {
+                                    sum += array[i];
                                 }
-                                    if (data == sum) {
-                                        State = javaState.PacketEnd;   //继续等待结束
-                                    } else {
-                                        State = javaState.PacketHead;   //重新接收数据
-                                    }
+                                if (data == sum) {
+                                    State = javaState.PacketEnd;   //继续等待结束
+                                } else {
+                                    State = javaState.PacketHead;   //重新接收数据
+                                }
                                 break;
                             case PacketEnd:
                                 if (data == 0xfe) {
@@ -408,8 +429,7 @@ public class MainActivity extends AppCompatActivity {
                                 break;
                             case PacketEnd1:
                                 State = javaState.PacketHead;
-                                if(data != 0xfe)
-                                {
+                                if (data != 0xfe) {
                                     dataCount = 0;
                                     break;
                                 }
@@ -427,8 +447,8 @@ public class MainActivity extends AppCompatActivity {
 //                                write(send); //组数据包
 //                                for (int i=0;i<array.length;i++)
 //                                {
-                                    String temp=new String(array);
-                                    RebondValue.setText(temp);
+                                String temp = new String(array);
+                                RebondValue.setText(temp);
 //                                }
 
                                 break;
