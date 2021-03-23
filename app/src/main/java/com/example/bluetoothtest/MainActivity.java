@@ -1,8 +1,10 @@
 package com.example.bluetoothtest;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.os.Bundle;
@@ -27,6 +29,7 @@ import java.sql.Struct;
 import java.util.ArrayList;
 
 import android.widget.AdapterView;
+import android.widget.Toast;
 
 import java.lang.reflect.Method;
 import java.io.IOException;
@@ -43,6 +46,7 @@ import java.lang.Thread;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.CharBuffer;
+import java.util.logging.LogRecord;
 
 
 public class MainActivity extends AppCompatActivity {
@@ -51,9 +55,10 @@ public class MainActivity extends AppCompatActivity {
     int PageCount = 0;
     mBluetoothReceiver BluetoothReceiver;
     BluetoothDevice mBluetoothDevice;
+
     Button serch;
     Button secondBtn;
-    TextView RebondValue; //回弹显示TextView
+    TextView RebondValue;
     ListView BlueToothListView;
     TextView textView;
     BluetoothAdapter mBluetoothAdapter;
@@ -68,6 +73,11 @@ public class MainActivity extends AppCompatActivity {
     boolean connected = false;
     String AddressStrig;
     boolean BondStartFlag = false;
+    Handler handler = null;
+    Toast toast;
+    Intent intentB;
+
+    public ConnectedThread connectedThread = null;
 
     public enum javaState {
         PacketHead,
@@ -78,25 +88,14 @@ public class MainActivity extends AppCompatActivity {
         PacketEnd,
         PacketEnd1;
     }
-    public static Handler handler = new Handler(){
-        public void handleMessage(Message message)
-        {
-            switch (message.what)
-            {
-//                case REQUEST:
 
-//                    break;
-            }
-        }
-    };
+    MyClass myClass;
 
+    @SuppressLint("ShowToast")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-
-
         //获取蓝牙适配器
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -123,41 +122,41 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(BluetoothReceiver, filter);
 
 
-        serch = (Button) findViewById(R.id.serchbluetooth);  //按键按下之后打印一下
-        BlueToothListView = (ListView) findViewById(R.id.BlueToothID); //蓝牙名称的显示列表
-        RebondValue = (TextView) findViewById(R.id.textViewReBondValue);
-        //搜索蓝牙的监听
-        serch.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                //开始搜索
-                deviceName.clear();  //清除列表
-                arrayList.clear();
-                adapter = new ArrayAdapter<String>(getApplicationContext(), android.R.layout.simple_list_item_1, deviceName);
-                BlueToothListView.setAdapter(adapter);//显示
+        serch = findViewById(R.id.serchbluetooth);  //按键按下之后打印一下
+        BlueToothListView = findViewById(R.id.BlueToothID); //蓝牙名称的显示列表
+//        RebondValue = findViewById(R.id.textViewReBondValue);
+        toast = Toast.makeText(this, "", Toast.LENGTH_SHORT);
 
-                mBluetoothAdapter.startDiscovery();//开始搜索蓝牙
-                BondStartFlag = true;
-                Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
-                if (devices.size() > 0) {
-                    for (Iterator<BluetoothDevice> it = devices.iterator(); it.hasNext(); ) {
-                        BluetoothDevice de = (BluetoothDevice) it.next();
-                        deviceName.add("设备名：" + de.getName() + "(已配对)\n" + "设备地址：" + de.getAddress() + "\n");
-                        arrayList.add(de.getAddress());//将搜索到的蓝牙地址添加到列表。
-                    }
+        myClass = (MyClass) getApplication();
+        intentB = new Intent(MainActivity.this, MainActivity2.class);
+
+        //搜索蓝牙的监听
+        serch.setOnClickListener((View.OnClickListener) view -> {
+            //开始搜索
+            deviceName.clear();  //清除列表
+            arrayList.clear();
+            adapter = new ArrayAdapter<String>(getApplicationContext(), android.R.layout.simple_list_item_1, deviceName);
+            BlueToothListView.setAdapter(adapter);//显示
+
+            mBluetoothAdapter.startDiscovery();//开始搜索蓝牙
+            BondStartFlag = true;
+            Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
+            if (devices.size() > 0) {
+                for (Iterator<BluetoothDevice> it = devices.iterator(); it.hasNext(); ) {
+                    BluetoothDevice de = (BluetoothDevice) it.next();
+                    deviceName.add("设备名：" + de.getName() + "(已配对)\n" + "设备地址：" + de.getAddress() + "\n");
+                    arrayList.add(de.getAddress());//将搜索到的蓝牙地址添加到列表。
                 }
-                Log.i("zn3", "onReceive3333: ");
             }
         });
-        secondBtn = (Button) findViewById(R.id.second);
-        secondBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this, MainActivity2.class);
-//                intent.setAction("MainActivity2");
-                startActivity(intent);
-            }
-        });
+//        secondBtn = (Button) findViewById(R.id.second);
+//        secondBtn.setOnClickListener(new View.OnClickListener() {
+//            @Override
+//            public void onClick(View v) {
+////                startActivity(intentB);
+////                Toast.makeText(MainActivity.this, "登录成功", Toast.LENGTH_LONG).show();//悬浮提示
+//            }
+//        });
         //ListView显示监听
         BlueToothListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 
@@ -181,6 +180,8 @@ public class MainActivity extends AppCompatActivity {
         BlueToothListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
             public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                AddressStrig = arrayList.get(position);  //获得当前选中的Item对应list里面的地址
+                mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(AddressStrig);
                 if (mBluetoothDevice.getBondState() == BluetoothDevice.BOND_BONDED) {
                     try {
                         Method removeBondMethod = BluetoothDevice.class.getMethod("removeBond");
@@ -197,7 +198,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-
     protected void connectDevice() {
         try {
             // 连接建立之前的先配对
@@ -210,14 +210,19 @@ public class MainActivity extends AppCompatActivity {
 //                removeBondMethod.invoke(mBluetoothDevice);
 //                showExitDialog01("取消配对");
                 try {
+                    mBluetoothAdapter.cancelDiscovery();
                     socket.connect();  //Socket连接
-                    Log.e("TAG", "连接成功");
-                    showExitDialog01("蓝牙连接成功");
+                    Toast.makeText(MainActivity.this, "连接成功", Toast.LENGTH_SHORT).show();//悬浮提示
+//                    showExitDialog01("蓝牙连接成功");
+                    myClass.setMac(AddressStrig);
+                    myClass.setSocket(socket);
                     connected = true;
-                    new ConnectedThread(socket).start(); //开启线程
-                    mBluetoothAdapter.cancelDiscovery();  //断开搜索
+                    startActivity(intentB);
+                    connectedThread = new ConnectedThread(socket); //开启线程
+                    connectedThread.start();
                 } catch (IOException e) {
                     // TODO: handle exception
+                    Toast.makeText(MainActivity.this, "连接失败", Toast.LENGTH_SHORT).show();//悬浮提示
                     connected = false;
                     try {
                         socket.close();
@@ -232,7 +237,8 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             // TODO: handle exception
             //DisplayMessage("无法配对！");
-            Log.e("TAG", "无法配对");
+//            Log.e("TAG", "无法配对");
+            Toast.makeText(MainActivity.this, "配对失败", Toast.LENGTH_SHORT).show();//悬浮提示
             e.printStackTrace();
         }
     }
@@ -277,14 +283,24 @@ public class MainActivity extends AppCompatActivity {
 
                         try {
                             socket.connect();  //Socket连接
-                            Log.e("TAG", "连接成功");
-                            showExitDialog01("蓝牙连接成功");
+                            Toast.makeText(MainActivity.this, "连接成功", Toast.LENGTH_SHORT).show();//悬浮提示
+//                            showExitDialog01("蓝牙连接成功");
                             connected = true;
-                            new ConnectedThread(socket).start(); //开启线程
+                            myClass.setMac(AddressStrig);
+                            myClass.setSocket(socket);
+//                            intentB = new Intent(MainActivity.this, MainActivity2.class);
+//                intent.setAction("MainActivity2");
+                            startActivity(intentB);
+//                            if ((connectedThread != null) || (connectedThread.isRunning())) {
+//                                connectedThread.cancel();
+//                            }
+                            connectedThread = new ConnectedThread(socket); //开启线程
+                            connectedThread.start();
                             mBluetoothAdapter.cancelDiscovery();  //断开搜索
+
                         } catch (IOException e) {
-                            // TODO: handle exception
                             connected = false;
+                            Toast.makeText(MainActivity.this, "连接失败", Toast.LENGTH_SHORT).show();//悬浮提示
                             try {
                                 socket.close();
                                 socket = null;
@@ -299,7 +315,9 @@ public class MainActivity extends AppCompatActivity {
                 case BluetoothAdapter.ACTION_STATE_CHANGED:
                 case BluetoothAdapter.ACTION_DISCOVERY_FINISHED:
                     if (BondStartFlag == true) {
-                        showExitDialog01("搜索完成");
+//                        showExitDialog01("搜索完成");
+//                        toast.setText("搜索完成");
+                        Toast.makeText(MainActivity.this, "搜索完成", Toast.LENGTH_SHORT).show();//悬浮提示
                         BondStartFlag = false;
                     }
                     break;
@@ -323,12 +341,14 @@ public class MainActivity extends AppCompatActivity {
         private final BluetoothSocket mmSocket;
         private final InputStream mmInStream;
         private final OutputStream mmOutStream;
+        private boolean running;
 
         public ConnectedThread(BluetoothSocket socket) {
 
             mmSocket = socket;
             InputStream tmpIn = null;
             OutputStream tmpOut = null;
+            running = true;
 
             // 获取BluetoothSocket的input and output streams
             try {
@@ -348,7 +368,7 @@ public class MainActivity extends AppCompatActivity {
             StringBuffer strBuf = new StringBuffer(); // 下划线命名法
             char[] array = new char[100];
             int Date = 0;
-            int dataCount = 0;
+            char dataCount = 0;
             String destination;
             javaState State = javaState.PacketHead;
             Log.i("zn", "线程开始");
@@ -356,6 +376,9 @@ public class MainActivity extends AppCompatActivity {
             ByteBuffer reData = ByteBuffer.allocate(1024);
 
             while (true) {
+                if (!running) {
+                    break;
+                }
                 Log.i("zn", "循环开始");
                 try {
                     Log.d("zn", "准备接收到数据");
@@ -410,10 +433,12 @@ public class MainActivity extends AppCompatActivity {
                                 dataCount++;
                                 break;
                             case PacketSum:
-                                int sum = 0;
-                                for (int i = 1; i < array.length; i++) {
+
+                                char sum = 0;
+                                for (int i = 1; i < dataCount; i++) {
                                     sum += array[i];
                                 }
+                                sum = (char) (sum % 256);
                                 if (data == sum) {
                                     State = javaState.PacketEnd;   //继续等待结束
                                 } else {
@@ -433,40 +458,49 @@ public class MainActivity extends AppCompatActivity {
                                     dataCount = 0;
                                     break;
                                 }
-//                                if (PageCount == 2147483646) {
-//                                    PageCount = 0;
-//                                }
-//                                PageCount++; //得到完整数据包
-//
-//                                sendbyte[4] = PageCount;
-//                                sendbyte[5] = PageCount + 0x05;
-//                                for (int ij = 0; ij < 8; ij++) {
-//                                    send[ij] = (byte) sendbyte[ij];
-//                                }
-////                                    Log.e("zn", "9");
-//                                write(send); //组数据包
-//                                for (int i=0;i<array.length;i++)
-//                                {
+                                MyDataClss myDataClss = new MyDataClss(array, dataCount);
+                                if (handler == null) {
+                                    handler = myClass.getHandler();
+                                    if(handler == null) {
+                                        break;
+                                    }
+                                }
                                 String temp = new String(array);
-                                RebondValue.setText(temp);
+                                Message msg = new Message();
+                                msg.what = 0;
+                                msg.obj = (Object) myDataClss;
+                                handler.sendMessage(msg);
 //                                }
 
                                 break;
                         }
                         //  }
                     }
-//                    RebondValue.setText(String.valueOf(Date)); //显示数据
 
-                    //  Log.d("zn", String.valueOf(Date));
-                    //  Log.d("zn", "已经接收到数据");
-                    // Log.d("znbytes",data); //String.valueOf(bytes));
-//                    mHandler.obtainMessage(Constants.MESSAGE_READ, bytes, -1, buffer)
-//                            .sendToTarget();
                 } catch (IOException e) {
                     Log.e("zn", "disconnected", e);
+                    handler = null;
+
                     break;
                 }
             }
+            try {
+                mmOutStream.close();
+                mmInStream.close();
+                mmSocket.close();
+                handler = null;
+                socket.close();
+                socket.getInputStream().close();
+                socket.getOutputStream().close();
+
+                socket = null;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public boolean isRunning() {
+            return running;
         }
 
         //写数据
@@ -484,6 +518,7 @@ public class MainActivity extends AppCompatActivity {
 
         public void cancel() {
             try {
+                running = false;
                 mmSocket.close();
             } catch (IOException e) {
                 Log.e("zn", "close() of connect socket failed", e);
@@ -493,11 +528,11 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        try {
-            socket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+//        try {
+//            socket.close();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
         super.onDestroy();
 
     }
