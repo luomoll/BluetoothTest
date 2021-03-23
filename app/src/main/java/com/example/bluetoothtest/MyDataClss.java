@@ -22,6 +22,7 @@ public class MyDataClss {
         u8Function = array[1];
         for (int i = 2; i < lengh; i++) {
             u8Buf[i - 2] = array[i];
+
         }
     }
 
